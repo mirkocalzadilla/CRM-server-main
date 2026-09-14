@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: marketing-postgres
+    environment:
+      POSTGRES_USER: marketing
+      POSTGRES_PASSWORD: marketing_password
+      POSTGRES_DB: marketing_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marketing -d marketing_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: marketing-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: marketing-backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./alembic.ini:/app/alembic.ini
+      # Sin este montaje el contenedor corre las migraciones HORNEADAS en la imagen:
+      # una migración nueva del working tree no se aplica hasta rebuildear, y el
+      # `alembic upgrade head` del arranque reporta "ya está al día" mintiendo.
+      - ./migrations:/app/migrations
+      # Media compartida con el worker: el webhook guarda acá el comprobante que manda
+      # el lead y el worker lo lee para validarlo. Sin volumen común cada contenedor
+      # tiene su propio /app/uploads y el worker no encuentra el archivo (en prod ya
+      # comparten el named volume `uploads_data`).
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn server.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: marketing-worker
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+      - uploads_data:/app/uploads  # el mismo media que escribe el webhook (ver `backend`)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m server.worker
+    # margen para que el worker termine el item en vuelo + el wake de DEQUEUE_TIMEOUT
+    stop_grace_period: 15s
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:

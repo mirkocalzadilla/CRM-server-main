@@ -1,0 +1,14 @@
+[Unit]
+Description=Marketing Services - deploy pull-based (chequea origin/main y actualiza el stack)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/home/deploy/marketing-services
+ExecStart=/home/deploy/marketing-services/scripts/vps-pull-deploy.sh
+TimeoutStartSec=600
+# La salida va a journald: journalctl -u mks-deploy.service

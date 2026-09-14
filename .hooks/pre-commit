@@ -1,0 +1,15 @@
+#!/bin/sh
+# Fast pre-commit checks — lint + types only (no pytest, too slow for a hook).
+# Full test suite runs in CI and via /close before creating the PR.
+set -e
+
+echo "→ ruff check..."
+uv run ruff check src/ tests/
+
+echo "→ ruff format check..."
+uv run ruff format --check src/ tests/
+
+echo "→ mypy..."
+uv run mypy src/ --ignore-missing-imports
+
+echo "✓ Pre-commit checks passed."

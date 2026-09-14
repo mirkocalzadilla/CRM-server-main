@@ -1,0 +1,123 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: marketing-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - backend
+    depends_on:
+      app:
+        condition: service_healthy
+
+  app:
+    image: ghcr.io/funnelops-marketing-services/server:${IMAGE_TAG:?IMAGE_TAG requerido — nunca :latest en prod; usar IMAGE_TAG=<sha> (docs/RUNBOOK_DEPLOY.md §5)}
+    container_name: marketing-app
+    restart: unless-stopped
+    env_file: .env
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - backend
+
+  worker:
+    image: ghcr.io/funnelops-marketing-services/server:${IMAGE_TAG:?IMAGE_TAG requerido — nunca :latest en prod; usar IMAGE_TAG=<sha> (docs/RUNBOOK_DEPLOY.md §5)}
+    container_name: marketing-worker
+    restart: unless-stopped
+    env_file: .env
+    command: python -m server.worker
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    stop_grace_period: 15s
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+
+  migrate:
+    image: ghcr.io/funnelops-marketing-services/server:${IMAGE_TAG:?IMAGE_TAG requerido — nunca :latest en prod; usar IMAGE_TAG=<sha> (docs/RUNBOOK_DEPLOY.md §5)}
+    restart: "no"
+    env_file: .env
+    command: alembic upgrade head
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    profiles:
+      - migrate
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: marketing-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-marketing}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-marketing_platform}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-marketing} -d ${POSTGRES_DB:-marketing_platform}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    container_name: marketing-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+  uploads_data:

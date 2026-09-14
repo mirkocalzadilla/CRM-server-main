@@ -1,0 +1,13 @@
+[Unit]
+Description=Dispara mks-deploy.service cada ~2 min (deploy pull-based)
+
+[Timer]
+# Primer chequeo 2 min tras el boot, luego cada 2 min. Jitter para no clavar siempre el mismo segundo.
+OnBootSec=2min
+OnUnitActiveSec=2min
+RandomizedDelaySec=20
+AccuracySec=15s
+Unit=mks-deploy.service
+
+[Install]
+WantedBy=timers.target

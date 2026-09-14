@@ -1,0 +1,52 @@
+# Entorno
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual envs
+.venv/
+.venv-tools/
+venv/
+env/
+
+# Tests / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Mypy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Media (runtime uploads: QR, catálogo PDFs — servidos desde media_root)
+uploads/
+
+# Comprobantes de pago reales usados como fixtures de la validación por visión.
+# Contienen datos bancarios personales (nombres, cuentas, montos): NUNCA se commitean.
+# La ground truth campo por campo vive en el handoff, no los binarios.
+tests/fixtures/comprobantes/
+
+# Local-only (per-dev)
+docker-compose.override.yml

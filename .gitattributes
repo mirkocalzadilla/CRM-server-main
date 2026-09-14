@@ -1,0 +1,9 @@
+# Scripts y units que corren en el VPS (Linux): SIEMPRE LF, nunca CRLF.
+# Un CR en el shebang o en un unit de systemd rompe el deploy.
+*.sh             text eol=lf
+deploy/systemd/* text eol=lf
+
+# Bitácora: log append-only. `union` hace que dos PRs que agregan entradas a la vez
+# se auto-mergeen (git conserva ambas) en vez de marcar conflicto. Reemplaza al bot
+# update-bitacora que pusheaba directo a main (incompatible con branch protection).
+BITACORA.md      merge=union
