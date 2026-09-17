@@ -44,7 +44,8 @@ from .test_catalog import (
 )
 
 LEAD_WA_ID = "59170000333"
-SOON = datetime(2026, 9, 10, 19, 0, tzinfo=UTC)
+# Relativo a hoy: una fecha fija vence y rompe los tests de eventos proximos (CI 2026-09-14).
+SOON = (datetime.now(UTC) + timedelta(days=30)).replace(hour=19, minute=0, second=0, microsecond=0)
 
 
 @pytest.fixture(autouse=True)
@@ -466,7 +467,7 @@ async def test_event_abm(client: AsyncClient, session_factory: SessionFactory) -
         json={
             "service_id": str(service_id),
             "nombre": "Edición octubre",
-            "starts_at": "2026-10-05T19:00:00+00:00",
+            "starts_at": "2036-10-05T19:00:00+00:00",
             "location": "Sede centro",
             "maps_url": "https://maps.app/centro",
             "capacity": 20,
@@ -530,7 +531,7 @@ async def test_creating_the_missing_event_delivers_the_cards_waiting_for_it(
         json={
             "service_id": str(service_id),
             "nombre": "Edición octubre",
-            "starts_at": "2026-10-05T19:00:00+00:00",
+            "starts_at": "2036-10-05T19:00:00+00:00",
             "location": "Sede centro",
         },
         headers=_auth(token),
@@ -539,7 +540,7 @@ async def test_creating_the_missing_event_delivers_the_cards_waiting_for_it(
     assert created.status_code == 201, created.text
     assert len(sender.images) == 1
     caption = sender.images[0][2]
-    assert "Fecha: 05/10/2026" in caption and "Hora: 15:00" in caption  # 19:00 UTC → La Paz
+    assert "Fecha: 05/10/2036" in caption and "Hora: 15:00" in caption  # 19:00 UTC → La Paz
     assert "Lugar: Sede centro" in caption
     assert card_flags.NO_EVENT not in await _flags(session_factory, card_id)
     async with session_factory() as session:
@@ -578,7 +579,7 @@ async def test_event_of_unknown_service_is_rejected(
         json={
             "service_id": str(uuid.uuid4()),
             "nombre": "Fantasma",
-            "starts_at": "2026-10-05T19:00:00+00:00",
+            "starts_at": "2036-10-05T19:00:00+00:00",
         },
         headers=_auth(token),
     )
@@ -595,7 +596,7 @@ async def test_invalid_event_status_is_rejected(
         json={
             "service_id": str(service_id),
             "nombre": "X",
-            "starts_at": "2026-10-05T19:00:00+00:00",
+            "starts_at": "2036-10-05T19:00:00+00:00",
             "status": "cancelado",
         },
         headers=_auth(token),
@@ -613,7 +614,7 @@ async def test_event_maps_url_must_be_http(
         json={
             "service_id": str(service_id),
             "nombre": "X",
-            "starts_at": "2026-10-05T19:00:00+00:00",
+            "starts_at": "2036-10-05T19:00:00+00:00",
             "maps_url": "maps.app/sin-esquema",
         },
         headers=_auth(token),

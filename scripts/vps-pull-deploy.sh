@@ -12,7 +12,7 @@ set -euo pipefail
 REPO_DIR="/home/deploy/marketing-services"
 STATE_DIR="/home/deploy/.mks-deploy"
 COMPOSE="docker compose -f docker-compose.prod.yml"
-IMAGE="ghcr.io/funnelops-marketing-services/server"
+IMAGE="ghcr.io/mirkocalzadilla/crm-server-main"
 APP_CONTAINER="marketing-app"
 WORKER_CONTAINER="marketing-worker"
 HEALTH_RETRIES=30      # x HEALTH_INTERVAL = ventana total de health-check

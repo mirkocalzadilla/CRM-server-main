@@ -3,6 +3,9 @@ services:
     image: caddy:2-alpine
     container_name: marketing-caddy
     restart: unless-stopped
+    environment:
+      # Dominio publico de la API; Caddy emite el certificado TLS para este host.
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN requerido en .env (ej. api.mirkocalzadilla.com)}
     ports:
       - "80:80"
       - "443:443"
@@ -17,7 +20,7 @@ services:
         condition: service_healthy
 
   app:
-    image: ghcr.io/funnelops-marketing-services/server:${IMAGE_TAG:?IMAGE_TAG requerido — nunca :latest en prod; usar IMAGE_TAG=<sha> (docs/RUNBOOK_DEPLOY.md §5)}
+    image: ghcr.io/mirkocalzadilla/crm-server-main:${IMAGE_TAG:?IMAGE_TAG requerido — nunca :latest en prod; usar IMAGE_TAG=<sha> (docs/RUNBOOK_DEPLOY.md §5)}
     container_name: marketing-app
     restart: unless-stopped
     env_file: .env
@@ -43,7 +46,7 @@ services:
       - backend
 
   worker:
-    image: ghcr.io/funnelops-marketing-services/server:${IMAGE_TAG:?IMAGE_TAG requerido — nunca :latest en prod; usar IMAGE_TAG=<sha> (docs/RUNBOOK_DEPLOY.md §5)}
+    image: ghcr.io/mirkocalzadilla/crm-server-main:${IMAGE_TAG:?IMAGE_TAG requerido — nunca :latest en prod; usar IMAGE_TAG=<sha> (docs/RUNBOOK_DEPLOY.md §5)}
     container_name: marketing-worker
     restart: unless-stopped
     env_file: .env
@@ -65,7 +68,7 @@ services:
       - backend
 
   migrate:
-    image: ghcr.io/funnelops-marketing-services/server:${IMAGE_TAG:?IMAGE_TAG requerido — nunca :latest en prod; usar IMAGE_TAG=<sha> (docs/RUNBOOK_DEPLOY.md §5)}
+    image: ghcr.io/mirkocalzadilla/crm-server-main:${IMAGE_TAG:?IMAGE_TAG requerido — nunca :latest en prod; usar IMAGE_TAG=<sha> (docs/RUNBOOK_DEPLOY.md §5)}
     restart: "no"
     env_file: .env
     command: alembic upgrade head

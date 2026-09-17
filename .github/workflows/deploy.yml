@@ -6,7 +6,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # GHCR exige minusculas; github.repository trae 'CRM-server-main' con mayusculas.
+  IMAGE_NAME: mirkocalzadilla/crm-server-main
 
 jobs:
   lint:
