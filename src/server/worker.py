@@ -21,6 +21,7 @@ from server.config import get_settings
 from server.modules.agent.services.catch_up_service import run_catch_up
 from server.modules.agent.services.dispatch_handler import agent_dispatch_handler
 from server.modules.agent.services.vision_dispatch_handler import receipt_vision_handler
+from server.modules.outbound.services.outbound_jobs import run_outbound_jobs
 from server.shared.database import async_session_maker, dispose_engine
 from server.shared.dispatcher import Dispatcher, dispatcher, dispose_dispatcher
 from server.shared.logger import configure_logging, get_logger
@@ -187,11 +188,13 @@ async def main() -> None:
     _install_signal_handlers(stop)
     try:
         await _catch_up_on_start()
-        # Los dos loops corren en paralelo: los turnos del agente no esperan a que
-        # termine de leerse un comprobante, ni al revés.
+        # Los loops corren en paralelo: los turnos del agente no esperan a que termine
+        # de leerse un comprobante, ni al revés; los envíos programados (M-Outbound)
+        # tampoco bloquean a ninguno de los dos.
         await asyncio.gather(
             consume(stop, handler=agent_dispatch_handler),
             consume_vision(stop, handler=receipt_vision_handler),
+            run_outbound_jobs(stop),
         )
     finally:
         await dispose_dispatcher()

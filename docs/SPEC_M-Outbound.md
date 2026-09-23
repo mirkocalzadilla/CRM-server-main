@@ -1,6 +1,6 @@
 # Spec — M-Outbound: envíos iniciados por el negocio (plantillas de Meta)
 
-Estado: **etapas A y B implementadas** (2026-09-23). Etapas C–E pendientes, ver §6.
+Estado: **etapas A, B y C implementadas** (2026-09-23). Etapas D–E pendientes, ver §6.
 
 ## 1. Intent
 
@@ -88,11 +88,28 @@ plantilla también falla, o la entrega es virtual (links, sin plantilla todavía
 `delivery_pending` como antes. `dedupe_key = entry:{qr_entry.id}` — la clave solo se
 graba en la fila cuando Meta acepta, así un intento fallido no bloquea el reintento.
 
-## 6. Pendiente (etapas C–E)
+## 5c. Etapa C — recordatorios de evento
+
+- **Runner**: `outbound_jobs.run_outbound_jobs()` corre en el worker junto a los dos
+  loops de consumo (`asyncio.gather`), un tick cada `OUTBOUND_JOB_INTERVAL_SECONDS`
+  (600). Cada job abre su sesión y commitea; un job que falla se reporta a Sentry y no
+  frena a los demás ni al loop.
+- **`EventReminderService.run(now)`**: fuera del horario permitido
+  (`OUTBOUND_SEND_HOUR_START`–`END`, 07–22 America/La_Paz) no hace nada. Dentro, para
+  cada evento futuro no cerrado dentro del horizonte (48 h), calcula qué ventana está
+  vencida (`due_reminder_window`, `OUTBOUND_REMINDER_HOURS="48,3"`) y manda
+  `recordatorio_evento` a cada entrada **no revocada** del evento con variables
+  `[nombre de pila | "de nuevo", evento, dd/mm/aaaa, HH:MM, lugar | "el lugar indicado en tu entrada"]`.
+- **Una sola ventana por tick, la más cercana**: una entrada emitida a 2 h del evento
+  recibe solo el aviso de 3 h, no una ráfaga. `dedupe_key = reminder:{event}:{entry}:{h}h`.
+- **Un aviso vencido fuera de horario se manda en el primer tick dentro de horario**
+  (la clave no se reclama hasta que sale), p. ej. el de 3 h de un evento de 09:00 sale
+  a las 07:00.
+- Baja y revocación se respetan (la baja en `TemplateSender`, la revocación en la query).
+
+## 6. Pendiente (etapas D–E)
 
 - **B2** (opcional) — plantilla para entregas virtuales (links de acceso) fuera de ventana.
-- **C** — job diario en el worker: `recordatorio_evento` 48 h y 3 h antes a las entradas
-  válidas de cada evento futuro; `dedupe_key` por evento+card+ventana.
 - **D** — job de reactivación: regla por etapa del embudo + días sin respuesta + novedad
   del mes; exclusiones (baja, cerradas, humano activo, contacto reciente); tope diario
   (100) y horario permitido (07:00–22:00 America/La_Paz).

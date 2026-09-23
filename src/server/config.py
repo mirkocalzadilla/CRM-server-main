@@ -79,6 +79,19 @@ class Settings(BaseSettings):
     # Throttle vs. costo de LLM: más bajo = resumen más fresco, más llamadas Haiku.
     summary_refresh_every_n_turns: int = 3
 
+    # Outbound (M-Outbound): business-initiated templates. Send hours are in the
+    # business timezone (America/La_Paz); the periodic job skips ticks outside them.
+    outbound_send_hour_start: int = 7
+    outbound_send_hour_end: int = 22
+    outbound_job_interval_seconds: int = 600
+    # Event reminders (etapa C): hours before `starts_at`, largest first.
+    outbound_reminder_hours: str = "48,3"
+
+    @property
+    def outbound_reminder_windows(self) -> tuple[int, ...]:
+        hours = [int(h) for h in self.outbound_reminder_hours.split(",") if h.strip()]
+        return tuple(sorted(set(hours), reverse=True))
+
     @property
     def whatsapp_api_url(self) -> str:
         return f"https://graph.facebook.com/{self.whatsapp_api_version}/{self.whatsapp_phone_number_id}/messages"
