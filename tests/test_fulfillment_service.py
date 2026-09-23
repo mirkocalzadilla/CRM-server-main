@@ -664,3 +664,77 @@ async def test_hybrid_without_the_meeting_link_still_delivers_and_warns(
     assert outcome.delivered is True
     assert len(sender.images) == 1
     assert card_flags.MISSING_LINK in outcome.flags
+
+
+# ------------------ M-Outbound etapa B: entrada por plantilla fuera de ventana ------------------
+
+
+class _TemplateSender(_RecordingSender):
+    """Free-form sends fail (window closed); templates go through unless told otherwise."""
+
+    def __init__(self, *, template_fail: bool = False) -> None:
+        super().__init__(fail=OutsideWindowError("ventana cerrada"))
+        self.templates: list[tuple[str, str, list[dict[str, object]]]] = []
+        self._template_fail = template_fail
+
+    async def send_template(
+        self, to: str, name: str, lang: str, components: list[dict[str, object]]
+    ) -> str | None:
+        if self._template_fail:
+            raise ExternalServiceError("meta rechazó la plantilla")
+        self.templates.append((to, name, components))
+        return f"wamid.tpl.{len(self.templates)}"
+
+
+async def test_outside_window_entry_goes_out_as_template_and_delivers(
+    session_factory: SessionFactory,
+) -> None:
+    org_id, card_id = await _seed(session_factory, modality="presencial")
+    sender = _TemplateSender()
+    outcome = await _deliver(session_factory, org_id, card_id, sender)
+
+    assert outcome.delivered is True
+    assert sender.images == []  # el envío libre fue rechazado por la ventana
+    (to, name, components) = sender.templates[0]
+    assert (to, name) == (LEAD_WA_ID, "entry_qr_ready")
+    header, body = components
+    assert header["type"] == "header"
+    assert str(header["parameters"][0]["image"]["link"]).endswith(".png")  # type: ignore[index]
+    texts = [p["text"] for p in body["parameters"]]  # type: ignore[union-attr]
+    assert texts[0] == "Lead" and texts[1] == "Edición de prueba" and " a las " in str(texts[2])
+    assert await _stage_name(session_factory, card_id) == stages.CLOSED
+    assert card_flags.DELIVERY_PENDING not in await _flags(session_factory, card_id)
+
+    async with session_factory() as session:
+        from server.modules.outbound.domain.models import OutboundMessage
+
+        rows = (await session.execute(select(OutboundMessage))).scalars().all()
+        mirrored = (await session.execute(select(AiChatHistory))).scalars().all()
+    assert [(r.status, r.purpose, r.wamid) for r in rows] == [("sent", "entry", "wamid.tpl.1")]
+    templates = [m for m in mirrored if m.message.get("kind") == "template"]
+    assert len(templates) == 1 and templates[0].message.get("media_type") == "image"
+
+
+async def test_outside_window_entry_template_failure_leaves_delivery_pending(
+    session_factory: SessionFactory,
+) -> None:
+    org_id, card_id = await _seed(session_factory, modality="presencial")
+    outcome = await _deliver(session_factory, org_id, card_id, _TemplateSender(template_fail=True))
+
+    assert outcome.delivered is False
+    assert await _stage_name(session_factory, card_id) == stages.PAYMENT_VALIDATED
+    assert card_flags.DELIVERY_PENDING in await _flags(session_factory, card_id)
+
+
+async def test_outside_window_virtual_delivery_has_no_template_and_stays_pending(
+    session_factory: SessionFactory,
+) -> None:
+    org_id, card_id = await _seed(
+        session_factory, modality="virtual", links=[("whatsapp_group", "https://chat.w/x")]
+    )
+    sender = _TemplateSender()
+    outcome = await _deliver(session_factory, org_id, card_id, sender)
+
+    assert outcome.delivered is False
+    assert sender.templates == []
+    assert card_flags.DELIVERY_PENDING in await _flags(session_factory, card_id)

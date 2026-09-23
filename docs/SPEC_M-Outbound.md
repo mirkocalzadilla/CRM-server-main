@@ -1,6 +1,6 @@
 # Spec — M-Outbound: envíos iniciados por el negocio (plantillas de Meta)
 
-Estado: **etapa A implementada** (2026-09-23). Etapas B–E pendientes, ver §6.
+Estado: **etapas A y B implementadas** (2026-09-23). Etapas C–E pendientes, ver §6.
 
 ## 1. Intent
 
@@ -76,10 +76,21 @@ mensaje iniciado por el negocio, con registro, idempotencia, baja y estados de e
 - **El espejo usa `role: assistant`** con `kind: template` para que el mirror existente lo
   muestre sin cambios; el CRM puede distinguirlo por `kind` cuando quiera un chip.
 
-## 6. Pendiente (etapas B–E)
+## 5b. Etapa B — entrada por plantilla fuera de ventana
 
-- **B** — `fulfillment_service`: al caer en `delivery_pending` por ventana, enviar
-  `entry_qr_ready` con la imagen del QR vía `TemplateSender` en vez de esperar al lead.
+`fulfillment_service.deliver()`: cuando el envío libre del QR falla con `OutsideWindowError`
+y la entrega es una entrada con evento conocido, `EntryTemplateDelivery` manda
+`entry_qr_ready` con el QR como imagen de encabezado y variables
+`[nombre de pila | "de nuevo", nombre del evento, "dd/mm/aaaa a las HH:MM" (La Paz)]`.
+Si Meta acepta, la card avanza a Entregado y se cierra igual que en el camino normal;
+el espejo del hilo lo hace el propio `TemplateSender` (no `record_delivery`). Si la
+plantilla también falla, o la entrega es virtual (links, sin plantilla todavía), queda
+`delivery_pending` como antes. `dedupe_key = entry:{qr_entry.id}` — la clave solo se
+graba en la fila cuando Meta acepta, así un intento fallido no bloquea el reintento.
+
+## 6. Pendiente (etapas C–E)
+
+- **B2** (opcional) — plantilla para entregas virtuales (links de acceso) fuera de ventana.
 - **C** — job diario en el worker: `recordatorio_evento` 48 h y 3 h antes a las entradas
   válidas de cada evento futuro; `dedupe_key` por evento+card+ventana.
 - **D** — job de reactivación: regla por etapa del embudo + días sin respuesta + novedad

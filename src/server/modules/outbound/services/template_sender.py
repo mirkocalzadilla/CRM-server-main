@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,7 @@ from server.shared.logger import get_logger
 logger = get_logger(__name__)
 
 
+@runtime_checkable
 class TemplateSenderPort(Protocol):
     async def send_template(
         self, to: str, name: str, lang: str, components: list[dict[str, object]]
@@ -96,6 +97,7 @@ class TemplateSender:
         row.status = STATUS_SENT
         row.wamid = wamid
         row.sent_at = datetime.now(UTC)
+        row.dedupe_key = req.dedupe_key  # only a success claims the key (UNIQUE column)
         await self._mirror(req, row.rendered_text)
         logger.info("outbound.sent", template=req.template.name, purpose=req.purpose, wamid=wamid)
         return SendResult(STATUS_SENT, row.id)
@@ -114,7 +116,6 @@ class TemplateSender:
                 purpose=req.purpose,
                 variables={"body": req.variables},
                 rendered_text=req.template.render(req.variables),
-                dedupe_key=req.dedupe_key,
                 status=status,
                 error_detail=error_detail,
             )

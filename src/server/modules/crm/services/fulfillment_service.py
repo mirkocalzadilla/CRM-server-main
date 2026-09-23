@@ -11,10 +11,11 @@ Reglas que gobiernan el orden de las cosas:
   mensaje roto — la card queda con un aviso y la retoma un humano. Pero el pago sí quedó
   validado y eso se le dice, una sola vez: un lead que pagó y no recibe nada asume lo
   peor (server#290).
-- **Una entrega pagada no se retiene por un dato administrativo**: si el lead no dio su
-  nombre, se entrega igual y la oportunidad queda sin cerrar, con su aviso (#241).
-- **Ventana de 24h**: si Meta rechaza el envío porque la conversación se enfrió, la
-  entrega queda pendiente y se reintenta en cuanto el lead vuelva a escribir.
+- **Una entrega pagada no se retiene por un dato administrativo**: sin nombre del lead
+  se entrega igual y la oportunidad queda sin cerrar, con su aviso (#241).
+- **Ventana de 24h**: si Meta rechaza el envío libre, una entrada sale igual por la
+  plantilla `entry_qr_ready` (M-Outbound B); si no, queda pendiente hasta que el lead
+  vuelva a escribir.
 """
 
 from __future__ import annotations
@@ -31,11 +32,14 @@ from server.modules.crm.domain import card_flags, stages
 from server.modules.crm.domain.models import Card
 from server.modules.crm.repositories.board_repository import BoardRepository
 from server.modules.crm.repositories.card_delivery_repository import CardDeliveryRepository
+from server.modules.crm.repositories.qr_entry_repository import QrEntryRepository
 from server.modules.crm.services.board_service import SYSTEM_ACTOR, BoardService
 from server.modules.crm.services.delivery_notice import DeliveryNotices
 from server.modules.crm.services.delivery_planner import DeliveryPlanner, PlannedDelivery
 from server.modules.crm.services.entry_service import EntryService
 from server.modules.crm.services.qr_image import public_url
+from server.modules.outbound.services.entry_delivery import EntryTemplateDelivery
+from server.modules.outbound.services.template_sender import TemplateSenderPort
 from server.shared.exceptions import (
     NotFoundException,
     OutsideWindowError,
@@ -74,6 +78,11 @@ class FulfillmentService:
         self._entries = EntryService(session=session, publisher=publisher, sender=self._sender)
         self._planner = DeliveryPlanner(session)
         self._notices = DeliveryNotices(session=session, sender=self._sender)
+        self._qr_entries = QrEntryRepository(session)
+        template_port: TemplateSenderPort = (
+            self._sender if isinstance(self._sender, TemplateSenderPort) else WhatsAppSender()
+        )
+        self._entry_template = EntryTemplateDelivery(session, template_port)
 
     async def deliver(self, card_id: uuid.UUID, org_id: uuid.UUID) -> DeliveryOutcome:
         """Entrega lo que corresponda a una card cuyo pago quedó validado.
@@ -106,12 +115,14 @@ class FulfillmentService:
         try:
             entry_url = await self._send(card, org_id, planned)
         except OutsideWindowError:
-            # La conversación se enfrió: Meta no acepta un envío libre. No es un error
-            # del sistema ni del pago — se reintenta cuando el lead vuelva a escribir.
+            # La conversación se enfrió: Meta no acepta un envío libre. Una entrada sale
+            # igual por plantilla (etapa B); si no, se reintenta cuando el lead escriba.
             logger.info("crm.delivery_outside_window", card_id=str(card.id))
-            return await self._block(card, card_flags.DELIVERY_PENDING)
-
-        await self._notices.record_delivery(card, org_id, planned.plan, entry_url)
+            entry_url = await self._send_entry_template(card, org_id, planned)
+            if entry_url is None:
+                return await self._block(card, card_flags.DELIVERY_PENDING)
+        else:  # the template path mirrors itself
+            await self._notices.record_delivery(card, org_id, planned.plan, entry_url)
         # Recién con el lead servido avanza el pipeline.
         await self._board_svc.move_card(card.id, delivered_stage.id, SYSTEM_ACTOR, org_id)
         flags = await self._clear_flags(card, keep=planned.plan.warnings)
@@ -141,6 +152,26 @@ class FulfillmentService:
             raise NotFoundException("conversación no encontrada para entregar")
         await self._sender.send_text(conversation.external_id, planned.plan.text)
         return None
+
+    async def _send_entry_template(
+        self, card: Card, org_id: uuid.UUID, planned: PlannedDelivery
+    ) -> str | None:
+        """Outside the window an issued entry still goes out as a template."""
+        if not planned.plan.needs_entry or planned.event is None:
+            return None
+        entry = await self._qr_entries.get_by_card(card.id)
+        conversation = await self._conv.get_by_id(card.conversation_id, org_id)
+        if entry is None or conversation is None:
+            return None
+        sent = await self._entry_template.send(
+            card=card,
+            org_id=org_id,
+            conversation=conversation,
+            entry=entry,
+            event_name=planned.event.nombre,
+            starts_at=planned.event.starts_at,
+        )
+        return public_url(entry.qr_ref) if sent else None
 
     async def _close(self, card: Card, org_id: uuid.UUID) -> tuple[bool, tuple[str, ...]]:
         """Cierra la oportunidad en `won`. Sin nombre del lead no se cierra, pero la
