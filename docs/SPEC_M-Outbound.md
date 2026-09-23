@@ -1,6 +1,6 @@
 # Spec — M-Outbound: envíos iniciados por el negocio (plantillas de Meta)
 
-Estado: **etapas A, B y C implementadas** (2026-09-23). Etapas D–E pendientes, ver §6.
+Estado: **etapas A–D implementadas** (2026-09-23). Etapa E (CRM) pendiente, ver §6.
 
 ## 1. Intent
 
@@ -107,11 +107,31 @@ graba en la fila cuando Meta acepta, así un intento fallido no bloquea el reint
   a las 07:00.
 - Baja y revocación se respetan (la baja en `TemplateSender`, la revocación en la query).
 
-## 6. Pendiente (etapas D–E)
+## 5d. Etapa D — reactivación de leads fríos
+
+- **Configuración por organización** (`outbound_settings`, migración `0039`): apagada por
+  defecto. `reactivation_enabled`, `reactivation_daily_cap` (100),
+  `reactivation_recontact_days` (30), `reactivation_rules` (JSON:
+  `[{"stages": ["engaging","qualified"], "days": 7}, {"stages": ["new"], "days": 14}]`) y
+  `novelty_text` (el `{{3}}` de la plantilla, lo escribe el negocio cada mes). **Sin
+  novedad no sale nada**: la plantilla quedaría con un hueco vacío.
+- **`ReactivationService.run(now)`**: dentro del horario permitido, por cada organización
+  habilitada recorre las reglas. Candidatos = conversaciones en esas etapas del embudo,
+  no cerradas, con la IA activa (un humano en el hilo excluye) y con una card abierta
+  (no ganada/perdida). Elegible si el último mensaje del lead (o la creación de la
+  conversación) tiene ≥ `days` y no recibió ningún envío nuestro en los últimos
+  `recontact_days`. La baja la corta `TemplateSender`.
+- **Variables**: `[nombre de pila | "de nuevo", primer servicio de la card | "nuestros
+  talleres y servicios", novedad]`. `dedupe_key = reactivation:{conversation}:{fecha local}`.
+- **Tope diario** por organización contando filas `sent/delivered/read` de
+  `purpose=reactivation` desde las 00:00 hora Bolivia.
+- Corre como job `reactivation` en `outbound_jobs.DEFAULT_JOBS`, mismo tick que los
+  recordatorios.
+
+## 6. Pendiente (etapa E)
 
 - **B2** (opcional) — plantilla para entregas virtuales (links de acceso) fuera de ventana.
-- **D** — job de reactivación: regla por etapa del embudo + días sin respuesta + novedad
-  del mes; exclusiones (baja, cerradas, humano activo, contacto reciente); tope diario
-  (100) y horario permitido (07:00–22:00 America/La_Paz).
-- **E** — CRM: pantalla Seguimientos, reglas en Ajustes, botón de envío manual en la card
-  y registro manual de la baja.
+- **E** — API + CRM: endpoints `GET /outbound/messages`, `GET/PUT /outbound/settings`,
+  `POST /crm/cards/{id}/send-template` y `POST /outbound/opt-outs`; pantalla Seguimientos,
+  reglas y novedad del mes en Ajustes, botón de envío manual en la card y registro manual
+  de la baja.

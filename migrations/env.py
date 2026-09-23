@@ -16,6 +16,7 @@ from server.modules.agent.domain import models as agent_models  # noqa: F401
 from server.modules.core.domain import models  # noqa: F401
 from server.modules.crm.domain import models as crm_models  # noqa: F401
 from server.modules.outbound.domain import models as outbound_models  # noqa: F401
+from server.modules.outbound.domain import settings_models as outbound_settings  # noqa: F401
 from server.shared.base_model import Base
 
 config = context.config

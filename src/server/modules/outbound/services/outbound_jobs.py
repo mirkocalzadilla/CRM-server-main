@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from server.config import get_settings
 from server.modules.agent.services.whatsapp_service import WhatsAppSender
 from server.modules.outbound.services.event_reminder_service import EventReminderService
+from server.modules.outbound.services.reactivation_service import ReactivationService
 from server.modules.outbound.services.template_sender import TemplateSenderPort
 from server.shared.database import async_session_maker
 from server.shared.logger import get_logger
@@ -29,7 +30,11 @@ async def _reminders(session: AsyncSession, sender: TemplateSenderPort) -> objec
     return await EventReminderService(session, sender).run()
 
 
-DEFAULT_JOBS: dict[str, Job] = {"event_reminders": _reminders}
+async def _reactivation(session: AsyncSession, sender: TemplateSenderPort) -> object:
+    return await ReactivationService(session, sender).run()
+
+
+DEFAULT_JOBS: dict[str, Job] = {"event_reminders": _reminders, "reactivation": _reactivation}
 
 
 async def run_jobs_once(

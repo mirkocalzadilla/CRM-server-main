@@ -80,3 +80,7 @@ class MarketingOptOut(Base, UUIDPrimaryKeyMixin):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+# Keep the per-organization settings table in the same metadata import path.
+from server.modules.outbound.domain.settings_models import OutboundSettings  # noqa: E402,F401
