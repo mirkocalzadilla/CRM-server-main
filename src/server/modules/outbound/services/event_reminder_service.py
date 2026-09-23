@@ -64,7 +64,7 @@ class EventReminderService:
             if hours is None:
                 continue
             for target in await self._repo.targets_for_event(event):
-                if await self._send(event, target, hours):
+                if await self.send_reminder(event, target, hours):
                     sent += 1
                 else:
                     skipped += 1
@@ -72,7 +72,8 @@ class EventReminderService:
             logger.info("outbound.reminders_sent", sent=sent, skipped=skipped)
         return ReminderRun(sent=sent, skipped=skipped)
 
-    async def _send(self, event: Event, target: ReminderTarget, hours: int) -> bool:
+    async def send_reminder(self, event: Event, target: ReminderTarget, hours: int | str) -> bool:
+        """One reminder to one entry. `hours` labels the dedupe key (int or 'manual:<ts>')."""
         local = to_business_time(event.starts_at)
         conversation = target.conversation
         result = await self._templates.send(
@@ -92,6 +93,7 @@ class EventReminderService:
                 card_id=target.card_id,
                 agent_id=conversation.instance.agent_id,
                 dedupe_key=f"reminder:{event.id}:{target.entry_id}:{hours}h",
+                # manual sends carry a timestamp in `hours`, so they never collide
             )
         )
         return result.sent

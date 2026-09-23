@@ -93,7 +93,7 @@ class ReactivationService:
                 if not await self._eligible(candidate, cfg, now, rule.inactive_days):
                     skipped += 1
                     continue
-                if await self._send(candidate, cfg, now):
+                if await self.send_to(candidate, cfg, now):
                     sent += 1
                     budget -= 1
                 else:
@@ -116,7 +116,10 @@ class ReactivationService:
         )
         return recent is None
 
-    async def _send(self, candidate: Candidate, cfg: OutboundSettings, now: datetime) -> bool:
+    async def send_to(
+        self, candidate: Candidate, cfg: OutboundSettings, now: datetime, *, manual: bool = False
+    ) -> bool:
+        """One reactivation to one lead. Manual sends get their own dedupe key."""
         conv = candidate.conversation
         interest = await self._repo.first_service_name(candidate.card_id) or _GENERIC_INTEREST
         result = await self._templates.send(
@@ -129,7 +132,11 @@ class ReactivationService:
                 conversation_id=conv.id,
                 card_id=candidate.card_id,
                 agent_id=conv.instance.agent_id,
-                dedupe_key=f"reactivation:{conv.id}:{to_business_time(now):%Y-%m-%d}",
+                dedupe_key=(
+                    f"reactivation:{conv.id}:manual:{now.timestamp():.0f}"
+                    if manual
+                    else f"reactivation:{conv.id}:{to_business_time(now):%Y-%m-%d}"
+                ),
             )
         )
         return result.sent

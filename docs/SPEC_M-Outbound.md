@@ -1,6 +1,6 @@
 # Spec — M-Outbound: envíos iniciados por el negocio (plantillas de Meta)
 
-Estado: **etapas A–D implementadas** (2026-09-23). Etapa E (CRM) pendiente, ver §6.
+Estado: **etapas A–E implementadas** (2026-09-23). Pendientes menores en §6.
 
 ## 1. Intent
 
@@ -128,10 +128,21 @@ graba en la fila cuando Meta acepta, así un intento fallido no bloquea el reint
 - Corre como job `reactivation` en `outbound_jobs.DEFAULT_JOBS`, mismo tick que los
   recordatorios.
 
-## 6. Pendiente (etapa E)
+## 5e. Etapa E — API y CRM
+
+API (`/api/v1/outbound`, `outbound/api/router.py`): `GET /messages` (historial paginado,
+filtros `purpose`/`status`), `GET /cards/{id}/messages`, `GET|PUT /settings`
+(`client_admin`; activar exige `novelty_text`), `GET|POST /opt-outs` (baja manual),
+`POST /cards/{id}/remind` (recordatorio del evento de su entrada vigente) y
+`POST /cards/{id}/reactivate` (reactivación manual con la novedad; `dedupe_key` propia).
+
+CRM (`web`): pantalla **Seguimientos** (`/seguimientos`, los 3 roles) con la tabla de
+envíos y su estado según Meta; sección **Seguimientos** en Ajustes (switch, novedad del
+mes, días por etapa, tope diario, recontacto); botones **Recordar evento** y
+**Reactivar lead** en el panel de la conversación.
+
+## 6. Pendiente
 
 - **B2** (opcional) — plantilla para entregas virtuales (links de acceso) fuera de ventana.
-- **E** — API + CRM: endpoints `GET /outbound/messages`, `GET/PUT /outbound/settings`,
-  `POST /crm/cards/{id}/send-template` y `POST /outbound/opt-outs`; pantalla Seguimientos,
-  reglas y novedad del mes en Ajustes, botón de envío manual en la card y registro manual
-  de la baja.
+- Registro manual de la baja desde la card (hoy: `POST /outbound/opt-outs` por API).
+- Chip visual en el hilo para los mensajes `kind: template` (hoy se ven como del agente).

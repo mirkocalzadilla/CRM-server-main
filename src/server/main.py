@@ -13,6 +13,7 @@ from server.modules.agent.api.webhook_router import router as webhook_router
 from server.modules.core.api.health_router import router as health_router
 from server.modules.core.api.router import core_router
 from server.modules.crm.api.router import router as crm_router
+from server.modules.outbound.api.router import router as outbound_router
 from server.shared.database import dispose_engine
 from server.shared.dispatcher import dispose_dispatcher
 from server.shared.handlers import register_exception_handlers
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(core_router, prefix=API_PREFIX)
     app.include_router(agent_module_router, prefix=API_PREFIX)
     app.include_router(crm_router, prefix=API_PREFIX)
+    app.include_router(outbound_router, prefix=API_PREFIX)  # /outbound (M-Outbound)
     app.include_router(webhook_router)  # sin prefijo: /webhooks/whatsapp
     app.include_router(health_router)  # sin prefijo: /health y /health/deep (#246)
     app.mount("/media", StaticFiles(directory=settings.media_root), name="media")
