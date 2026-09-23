@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.config import get_settings
 from server.modules.agent.domain.models import AgentInstance, AiChatHistory, Conversation
+from server.modules.agent.domain.ports import MessageSender
 from server.modules.agent.domain.whatsapp_schemas import (
     WAIncomingMessage,
     WAValue,
@@ -16,6 +17,9 @@ from server.modules.agent.repositories.ai_chat_history_repository import AiChatH
 from server.modules.agent.repositories.conversation_repository import ConversationRepository
 from server.modules.agent.services.whatsapp_service import WhatsAppSender
 from server.modules.crm.services.extra_receipt_service import flag_extra_receipt_if_processed
+from server.modules.outbound.domain.opt_out import is_opt_out_request
+from server.modules.outbound.services.opt_out_service import OptOutService
+from server.modules.outbound.services.status_service import OutboundStatusService
 from server.shared.dispatcher import Dispatcher
 from server.shared.logger import get_logger
 
@@ -45,9 +49,17 @@ class WhatsAppWebhookService:
     in `ai_chat_histories`, and enqueues `agent:dispatch` for the worker.
     """
 
-    def __init__(self, session: AsyncSession, dispatcher: Dispatcher) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        dispatcher: Dispatcher,
+        sender: MessageSender | None = None,
+    ) -> None:
         self.session = session
         self.dispatcher = dispatcher
+        self._sender: MessageSender = sender if sender is not None else WhatsAppSender()
+        self.status_service = OutboundStatusService(session)
+        self.opt_out_service = OptOutService(session, self._sender)
         self.instance_repo = AgentInstanceRepository(session)
         self.conv_repo = ConversationRepository(session)
         self.history_repo = AiChatHistoryRepository(session)
@@ -63,6 +75,7 @@ class WhatsAppWebhookService:
         # Before the instance lookup: a status-only change has no messages, and an
         # unknown instance must not hide a delivery failure.
         self._log_failed_statuses(value)
+        await self.status_service.apply(value.statuses)
         instance = await self.instance_repo.get_by_whatsapp_number(
             value.metadata.display_phone_number
         )
@@ -157,6 +170,15 @@ class WhatsAppWebhookService:
             )
         )
         logger.info("whatsapp.text_stored", wa_id=wa_id, wamid=wamid, conv_id=str(conversation.id))
+        if is_opt_out_request(text):
+            # Policy reply, not an agent turn: the lead asked not to be contacted.
+            await self.opt_out_service.register(
+                organization_id=organization_id,
+                agent_id=instance.agent_id,
+                conversation_id=conversation.id,
+                wa_id=wa_id,
+            )
+            return
         await self.dispatcher.enqueue(conversation_id=conversation.id, tenant_id=organization_id)
 
     async def _handle_media(

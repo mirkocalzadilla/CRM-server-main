@@ -20,6 +20,15 @@ def is_within_window(last_user_message_at: datetime | None) -> bool:
     return (datetime.now(UTC) - last_user_message_at) < timedelta(hours=_WINDOW_HOURS)
 
 
+def _first_message_id(body: dict[str, object]) -> str | None:
+    """`wamid` of the accepted message (`messages[0].id` in Meta's response)."""
+    messages = body.get("messages")
+    if isinstance(messages, list) and messages and isinstance(messages[0], dict):
+        wamid = messages[0].get("id")
+        return str(wamid) if wamid else None
+    return None
+
+
 class WhatsAppSender:
     """HTTP client for sending messages and downloading media via Meta Cloud API."""
 
@@ -68,8 +77,8 @@ class WhatsAppSender:
         name: str,
         lang: str,
         components: list[dict[str, object]],
-    ) -> None:
-        await self._post(
+    ) -> str | None:
+        body = await self._post(
             {
                 "messaging_product": "whatsapp",
                 "to": to,
@@ -81,7 +90,9 @@ class WhatsAppSender:
                 },
             }
         )
-        logger.info("whatsapp.sent", to=to, type="template", template=name)
+        wamid = _first_message_id(body)
+        logger.info("whatsapp.sent", to=to, type="template", template=name, wamid=wamid)
+        return wamid
 
     async def download_media(self, media_id: str) -> tuple[bytes, str]:
         """Download media binary from Meta. Returns (content, mime_type)."""
@@ -99,7 +110,7 @@ class WhatsAppSender:
         logger.info("whatsapp.media_downloaded", media_id=media_id, mime_type=mime_type)
         return content_resp.content, mime_type
 
-    async def _post(self, payload: dict[str, object]) -> None:
+    async def _post(self, payload: dict[str, object]) -> dict[str, object]:
         settings = get_settings()
         headers = {
             "Authorization": f"Bearer {settings.whatsapp_access_token}",
@@ -123,3 +134,8 @@ class WhatsAppSender:
                     "Cannot send message: 24h customer service window has expired"
                 )
         response.raise_for_status()
+        try:
+            body = response.json()
+        except ValueError:
+            return {}
+        return body if isinstance(body, dict) else {}

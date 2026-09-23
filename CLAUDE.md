@@ -6,7 +6,7 @@ Guidance for Claude Code (and any dev) working on the backend. **Read before tou
 
 - **Framework:** FastAPI
 - **Database:** PostgreSQL (asyncpg) + SQLAlchemy 2.0 (async) + Alembic. Docker image: **`pgvector/pgvector:pg16`** (the `agents` schema uses pgvector).
-- **Structure:** Modular by bounded contexts (`core`, `agent`). **Repository → Service → API Router. Never bypass layers.**
+- **Structure:** Modular by bounded contexts (`core`, `agent`, `crm`, `outbound`). **Repository → Service → API Router. Never bypass layers.**
 
 ## Paradigm / invariants — NO romper sin actualizar el diseño primero
 
@@ -43,7 +43,7 @@ Usá **`/close`**: muestra el diff, lo verifica contra `docs/` + estas reglas, r
 
 ## Project Structure
 
-- `src/server/` — código (main.py, config.py, `shared/`, `modules/<core|agent>/{domain,repositories,services,api}`).
+- `src/server/` — código (main.py, config.py, `shared/`, `modules/<core|agent|crm|outbound>/{domain,repositories,services,api}`). `outbound` = envíos iniciados por el negocio (plantillas de Meta), ver `docs/SPEC_M-Outbound.md`.
 - `tests/` — pytest. `migrations/` — Alembic.
 - `docs/` — diseño (DESIGN_*, BENCHMARK, FLUJO_AGENTE, SPECS_MVP, ESTADO_Y_RUNBOOK) + `reference/` (esquema agents) + `archive/` (handoffs históricos).
 - `BITACORA.md` — registro de cambios.
